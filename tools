@@ -13,413 +13,249 @@ NC='\033[0m' # No Color
 selected_interface=""
 monitor_interface=""
 scan_file=""
+VIRTUAL_MODE=false
 
 # Banner
 show_banner() {
     clear
     echo -e "${GREEN}"
     echo "╔══════════════════════════════════════════════╗"
-    echo "║           Advanced WiFi Pentesting Tool      ║"
-    echo "║                 Debian Terminal              ║"
+    echo "║           WiFi Pentesting Tool              ║"
+    echo "║              (VIRTUAL MODE)                 ║"
     echo "╚══════════════════════════════════════════════╝"
     echo -e "${NC}"
-    echo -e "${YELLOW}Disclaimer: Gunakan hanya untuk jaringan yang Anda miliki!${NC}"
+    echo -e "${YELLOW}Mode: ${VIRTUAL_MODE}${NC}"
+    echo -e "${RED}⚠️  VIRTUAL MODE - DEMO ONLY ⚠️${NC}"
     echo
 }
 
-# Check if run as root
-check_root() {
-    if [[ $EUID -ne 0 ]]; then
-        echo -e "${RED}[!] Script harus dijalankan sebagai root!${NC}"
-        echo "Gunakan: sudo ./wifi_tool.sh"
-        exit 1
+# Check virtual environment
+check_environment() {
+    echo -e "${YELLOW}[*] Checking system environment...${NC}"
+    
+    # Check if running in VirtualBox
+    if dmidecode -s system-product-name 2>/dev/null | grep -qi "virtualbox"; then
+        echo -e "${BLUE}[+] Running in VirtualBox${NC}"
+        VIRTUAL_MODE=true
+    fi
+    
+    # Check for WiFi hardware
+    if ! lsusb | grep -qi "wireless" && ! lspci | grep -qi "network"; then
+        echo -e "${RED}[!] No physical WiFi hardware detected${NC}"
+        VIRTUAL_MODE=true
+    fi
+    
+    if [ "$VIRTUAL_MODE" = true ]; then
+        echo -e "${YELLOW}[*] Virtual Mode Activated - Demo Features Only${NC}"
     fi
 }
 
-# Install requirements
-install_requirements() {
-    echo -e "${YELLOW}[*] Menginstall requirements...${NC}"
+# Virtual scan simulation
+virtual_scan() {
+    echo -e "${YELLOW}[*] Starting VIRTUAL WiFi Scan...${NC}"
+    echo -e "${CYAN}[*] This is a simulation for demo purposes${NC}"
     
-    apt update
-    apt install -y aircrack-ng \
-                   reaver \
-                   bully \
-                   hashcat \
-                   hcxdumptool \
-                   hcxtools \
-                   wireshark \
-                   tshark \
-                   macchanger \
-                   cowpatty \
-                   pixiewps \
-                   git \
-                   curl
-    
-    # Install wordlist jika belum ada
-    if [[ ! -f "/usr/share/wordlists/rockyou.txt" ]]; then
-        echo -e "${YELLOW}[*] Downloading wordlist...${NC}"
-        apt install -y wordlists
-        if [[ -f "/usr/share/wordlists/rockyou.txt.gz" ]]; then
-            gunzip /usr/share/wordlists/rockyou.txt.gz
-        fi
-    fi
-    
-    echo -e "${GREEN}[+] Semua requirements terinstall!${NC}"
-    sleep 2
-}
-
-# Select wireless interface
-select_interface() {
-    echo -e "${YELLOW}[*] Mencari interface WiFi...${NC}"
-    
-    # Find wireless interfaces
-    interfaces=$(iwconfig 2>/dev/null | grep -o "^[[:alnum:]]*" | grep -v "lo")
-    
-    if [[ -z "$interfaces" ]]; then
-        echo -e "${RED}[!] Tidak ada interface WiFi ditemukan!${NC}"
-        echo -e "${YELLOW}[*] Coba gunakan: ip link show${NC}"
-        ip link show
-        return 1
-    fi
-    
-    echo -e "${BLUE}[+] Interface WiFi ditemukan:${NC}"
-    PS3="Pilih interface: "
-    select interface in $interfaces; do
-        if [[ -n "$interface" ]]; then
-            selected_interface=$interface
-            echo -e "${GREEN}[+] Interface dipilih: $selected_interface${NC}"
-            break
-        else
-            echo -e "${RED}[!] Pilihan tidak valid!${NC}"
-        fi
-    done
-    
-    return 0
-}
-
-# Setup monitor mode
-setup_monitor() {
-    local interface=$1
-    echo -e "${YELLOW}[*] Menghentikan proses yang mengganggu...${NC}"
-    airmon-ng check kill > /dev/null 2>&1
-    
-    echo -e "${YELLOW}[*] Memulai monitor mode pada $interface...${NC}"
-    airmon-ng start $interface > /dev/null 2>&1
-    
-    # Cari interface monitor
-    monitor_interface=$(iwconfig 2>/dev/null | grep "mon" | cut -d' ' -f1 | head -1)
-    
-    if [[ -n "$monitor_interface" ]]; then
-        echo -e "${GREEN}[+] Monitor mode aktif: $monitor_interface${NC}"
-        return 0
-    else
-        echo -e "${RED}[!] Gagal memulai monitor mode!${NC}"
-        return 1
-    fi
-}
-
-# Scan WiFi networks dengan airodump-ng
-scan_wifi_airodump() {
-    echo -e "${YELLOW}[*] Memindai jaringan WiFi sekitar...${NC}"
-    echo -e "${CYAN}[Info] Tekan Ctrl+C untuk menghentikan scan${NC}"
-    
-    # Setup monitor mode jika belum aktif
-    if [[ -z "$monitor_interface" ]]; then
-        if ! select_interface; then
-            return 1
-        fi
-        if ! setup_monitor $selected_interface; then
-            return 1
-        fi
-    fi
-    
-    scan_file="wifi_scan_$(date +%Y%m%d_%H%M%S)"
-    echo -e "${YELLOW}[*] Scan disimpan di: ${scan_file}*.csv${NC}"
-    
-    # Scan dengan airodump-ng
-    timeout 30s airodump-ng $monitor_interface --write $scan_file --output-format csv
-    
-    # Parse dan tampilkan hasil scan
-    if [[ -f "${scan_file}-01.csv" ]]; then
-        parse_scan_results "${scan_file}-01.csv"
-    else
-        echo -e "${RED}[!] File scan tidak ditemukan!${NC}"
-        return 1
-    fi
-}
-
-# Parse dan tampilkan hasil scan
-parse_scan_results() {
-    local scan_file=$1
+    # Generate random networks for demo
     echo -e "${GREEN}"
     echo "╔══════════════════════════════════════════════╗"
-    echo "║               HASIL SCAN WiFi                ║"
+    echo "║              VIRTUAL SCAN RESULTS            ║"
     echo "╚══════════════════════════════════════════════╝"
     echo -e "${NC}"
     
-    # Parse CSV file dan format output
-    awk -F',' '
-    BEGIN {
-        printf "%-18s %-4s %-8s %-12s %-10s %-15s\n", 
-        "BSSID", "CH", "Sinyal", "Enkripsi", "Clients", "ESSID"
-        printf "%-18s %-4s %-8s %-12s %-10s %-15s\n", 
-        "----------------", "----", "--------", "------------", "----------", "---------------"
-    }
-    /^BSSID/ { next }  # Skip header
-    /^Station/ { exit } # Stop at client section
-    {
-        if (length($1) == 17 && $1 ~ /:/) {  # Valid BSSID
-            bssid = $1
-            channel = $4
-            speed = $5
-            encryption = $6
-            essid = $14
-            clients = "0"
-            
-            # Clean up ESSID
-            gsub(/^[ \t]+|[ \t]+$/, "", essid)
-            if (essid == "") essid = "(Hidden)"
-            
-            # Clean up encryption
-            gsub(/ /, "", encryption)
-            
-            printf "%-18s %-4s %-8s %-12s %-10s %-15s\n", 
-            bssid, channel, speed, encryption, clients, substr(essid, 1, 20)
-        }
-    }' "$scan_file"
+    echo -e "${BLUE}"
+    printf "%-18s %-4s %-8s %-12s %-15s\n" "BSSID" "CH" "SIGNAL" "ENCRYPTION" "ESSID"
+    printf "%-18s %-4s %-8s %-12s %-15s\n" "----------------" "----" "--------" "------------" "---------------"
+    
+    # Demo networks
+    printf "%-18s %-4s %-8s %-12s %-15s\n" "AA:BB:CC:DD:EE:01" "6" "-45" "WPA2" "HomeNetwork"
+    printf "%-18s %-4s %-8s %-12s %-15s\n" "AA:BB:CC:DD:EE:02" "11" "-52" "WPA2" "OfficeWiFi"
+    printf "%-18s %-4s %-8s %-12s %-15s\n" "AA:BB:CC:DD:EE:03" "1" "-60" "WEP" "Cafe_Free"
+    printf "%-18s %-4s %-8s %-12s %-15s\n" "AA:BB:CC:DD:EE:04" "9" "-48" "WPA2" "TP-Link_123"
+    printf "%-18s %-4s %-8s %-12s %-15s\n" "AA:BB:CC:DD:EE:05" "3" "-65" "OPEN" "PublicWiFi"
+    printf "%-18s %-4s %-8s %-12s %-15s\n" "AA:BB:CC:DD:EE:06" "6" "-55" "WPA3" "SecureNet"
+    echo -e "${NC}"
+    
+    scan_file="virtual_scan_$(date +%Y%m%d_%H%M%S)"
+    echo -e "${GREEN}[+] Virtual scan saved to: ${scan_file}${NC}"
 }
 
-# Quick scan dengan iwlist
-quick_scan() {
-    echo -e "${YELLOW}[*] Quick scan dengan iwlist...${NC}"
+# Virtual handshake capture
+virtual_handshake() {
+    echo -e "${YELLOW}[*] VIRTUAL Handshake Capture${NC}"
     
-    if ! select_interface; then
-        return 1
+    if [ -z "$scan_file" ]; then
+        virtual_scan
     fi
     
-    echo -e "${CYAN}"
-    iwlist $selected_interface scan | grep -E "ESSID|Channel|Encryption|Signal" | head -20
-    echo -e "${NC}"
-}
-
-# Detailed scan
-detailed_scan() {
-    echo -e "${YELLOW}[*] Detailed network scan...${NC}"
+    echo -e "${CYAN}[*] Available virtual networks:${NC}"
+    virtual_scan
     
-    if [[ -z "$monitor_interface" ]]; then
-        if ! select_interface; then
-            return 1
-        fi
-        if ! setup_monitor $selected_interface; then
-            return 1
-        fi
-    fi
+    read -p "Enter target BSSID (virtual): " bssid
+    read -p "Enter channel: " channel
+    read -p "Output filename: " output_file
     
-    echo -e "${GREEN}[*] Menampilkan informasi detail jaringan...${NC}"
-    echo -e "${CYAN}"
-    airodump-ng $monitor_interface --band abg
-    echo -e "${NC}"
-}
-
-# Scan menu
-scan_menu() {
-    while true; do
-        echo -e "${BLUE}"
-        echo "╔══════════════════════════════════════╗"
-        echo "║             SCAN MENU                ║"
-        echo "╚══════════════════════════════════════╝"
-        echo -e "${NC}"
-        echo "1. Quick Scan (iwlist)"
-        echo "2. Standard Scan (airodump-ng)"
-        echo "3. Detailed Scan"
-        echo "4. Lihat Hasil Scan Terakhir"
-        echo "5. Kembali ke Menu Utama"
-        echo
-        
-        read -p "Pilihan [1-5]: " choice
-        
-        case $choice in
-            1)
-                quick_scan
-                ;;
-            2)
-                scan_wifi_airodump
-                ;;
-            3)
-                detailed_scan
-                ;;
-            4)
-                if [[ -f "${scan_file}-01.csv" ]]; then
-                    parse_scan_results "${scan_file}-01.csv"
-                else
-                    echo -e "${RED}[!] Tidak ada hasil scan sebelumnya!${NC}"
-                fi
-                ;;
-            5)
-                return 0
-                ;;
-            *)
-                echo -e "${RED}[!] Pilihan tidak valid!${NC}"
-                ;;
-        esac
-        
-        echo
-        read -p "Tekan Enter untuk melanjutkan..."
+    echo -e "${YELLOW}[*] Starting virtual handshake capture...${NC}"
+    echo -e "${GREEN}[*] Listening on virtual interface...${NC}"
+    
+    # Simulate capture process
+    for i in {1..5}; do
+        echo -e "${BLUE}[*] Scanning... ($i/5)${NC}"
+        sleep 2
     done
+    
+    echo -e "${GREEN}[+] Virtual handshake captured!${NC}"
+    echo -e "${YELLOW}[*] Saved to: ${output_file}.cap${NC}"
+    
+    # Create dummy file
+    touch "${output_file}.cap"
 }
 
-# Capture handshake
-capture_handshake() {
-    echo -e "${YELLOW}[*] Mode Capture Handshake${NC}"
+# Virtual WPA bruteforce
+virtual_bruteforce() {
+    echo -e "${YELLOW}[*] VIRTUAL WPA Bruteforce${NC}"
     
-    if [[ ! -f "${scan_file}-01.csv" ]]; then
-        echo -e "${RED}[!] Lakukan scan terlebih dahulu!${NC}"
-        return 1
+    read -p "Enter handshake file (.cap): " cap_file
+    
+    if [ ! -f "$cap_file" ]; then
+        echo -e "${RED}[!] File not found. Using demo file...${NC}"
+        cap_file="demo_handshake.cap"
+        touch "$cap_file"
     fi
     
-    parse_scan_results "${scan_file}-01.csv"
+    echo -e "${YELLOW}[*] Available wordlists:${NC}"
+    echo "1. rockyou.txt"
+    echo "2. common_passwords.txt" 
+    echo "3. custom_list.txt"
     
-    echo
-    read -p "Masukkan BSSID target: " bssid
-    read -p "Masukkan channel target: " channel
-    read -p "Nama file output (tanpa ekstensi): " output_file
+    read -p "Select wordlist [1-3]: " wordlist_choice
     
-    if [[ -z "$monitor_interface" ]]; then
-        if ! select_interface; then
-            return 1
-        fi
-        if ! setup_monitor $selected_interface; then
-            return 1
-        fi
-    fi
+    case $wordlist_choice in
+        1) wordlist="rockyou.txt" ;;
+        2) wordlist="common_passwords.txt" ;;
+        3) wordlist="custom_list.txt" ;;
+        *) wordlist="rockyou.txt" ;;
+    esac
     
-    echo -e "${GREEN}[*] Menangkap handshake pada BSSID: $bssid${NC}"
-    echo -e "${YELLOW}[*] Tekan Ctrl+C ketika mendapatkan handshake${NC}"
-    
-    airodump-ng -c $channel --bssid $bssid -w $output_file $monitor_interface
-}
-
-# WPA bruteforce
-wpa_bruteforce() {
-    echo -e "${YELLOW}[*] Mode Bruteforce WPA${NC}"
-    
-    read -p "Masukkan path file handshake (.cap): " cap_file
-    read -p "Masukkan path wordlist (kosong untuk rockyou.txt): " wordlist
-    
-    wordlist=${wordlist:-"/usr/share/wordlists/rockyou.txt"}
-    
-    if [[ ! -f "$cap_file" ]]; then
-        echo -e "${RED}[!] File $cap_file tidak ditemukan!${NC}"
-        return 1
-    fi
-    
-    if [[ ! -f "$wordlist" ]]; then
-        echo -e "${RED}[!] File wordlist $wordlist tidak ditemukan!${NC}"
-        echo -e "${YELLOW}[*] Wordlist yang tersedia:${NC}"
-        find /usr/share/wordlists/ -name "*.txt" 2>/dev/null | head -10
-        return 1
-    fi
-    
-    echo -e "${GREEN}[*] Memulai bruteforce WPA...${NC}"
+    echo -e "${GREEN}[*] Starting virtual bruteforce...${NC}"
     echo -e "${YELLOW}[*] Wordlist: $wordlist${NC}"
-    aircrack-ng -w "$wordlist" "$cap_file"
+    
+    # Simulate cracking process
+    echo -e "${BLUE}[*] Loading wordlist...${NC}"
+    sleep 2
+    echo -e "${BLUE}[*] Testing passwords...${NC}"
+    
+    for i in {1..10}; do
+        percent=$((i * 10))
+        echo -e "${CYAN}[*] Progress: $percent% - Testing: password$i${NC}"
+        sleep 1
+    done
+    
+    echo -e "${RED}[!] Password not found in wordlist${NC}"
+    echo -e "${YELLOW}[*] Try different wordlist or method${NC}"
 }
 
-# WPS crack
-wps_crack() {
-    echo -e "${YELLOW}[*] Mode Crack WPS${NC}"
+# Virtual WPS crack
+virtual_wps_crack() {
+    echo -e "${YELLOW}[*] VIRTUAL WPS Crack${NC}"
     
-    if [[ ! -f "${scan_file}-01.csv" ]]; then
-        echo -e "${RED}[!] Lakukan scan terlebih dahulu!${NC}"
-        return 1
-    fi
+    virtual_scan
     
-    parse_scan_results "${scan_file}-01.csv"
+    read -p "Enter target BSSID: " bssid
+    read -p "Enter channel: " channel
     
-    echo
-    read -p "Masukkan BSSID target: " bssid
-    read -p "Masukkan channel target: " channel
+    echo -e "${GREEN}[*] Starting virtual WPS attack...${NC}"
+    echo -e "${YELLOW}[*] Target: $bssid on channel $channel${NC}"
     
-    if [[ -z "$selected_interface" ]]; then
-        if ! select_interface; then
-            return 1
-        fi
-    fi
+    # Simulate WPS attack
+    echo -e "${BLUE}[*] Scanning for WPS enabled...${NC}"
+    sleep 2
+    echo -e "${GREEN}[+] WPS enabled detected!${NC}"
     
-    echo -e "${GREEN}[*] Scanning WPS vulnerability...${NC}"
-    wash -i $selected_interface
+    for i in {1..8}; do
+        echo -e "${CYAN}[*] Trying PIN: 1234567$i${NC}"
+        sleep 1
+    done
     
-    echo -e "${GREEN}[*] Memulai WPS crack dengan reaver...${NC}"
-    reaver -i $selected_interface -b $bssid -c $channel -vv -K 1
-    
-    echo -e "${YELLOW}[*] Atau mencoba dengan bully...${NC}"
-    bully -b $bssid -c $channel $selected_interface -v 3
+    echo -e "${RED}[!] WPS attack failed - Try different method${NC}"
 }
 
-# Cleanup
-cleanup() {
-    echo -e "${YELLOW}[*] Membersihkan...${NC}"
-    if [[ -n "$monitor_interface" ]]; then
-        airmon-ng stop $monitor_interface > /dev/null 2>&1
-    fi
-    service network-manager restart
-    echo -e "${GREEN}[+] Cleanup selesai${NC}"
+# Educational content
+show_educational() {
+    echo -e "${PURPLE}"
+    echo "╔══════════════════════════════════════════════╗"
+    echo "║               EDUCATIONAL CONTENT            ║"
+    echo "╚══════════════════════════════════════════════╝"
+    echo -e "${NC}"
+    
+    echo -e "${YELLOW}WiFi Security Concepts:${NC}"
+    echo "1. WEP - Weak encryption, easily cracked"
+    echo "2. WPA - Improved security but vulnerable"
+    echo "3. WPA2 - Current standard, secure with strong passwords"
+    echo "4. WPA3 - Latest standard, enhanced security"
+    echo ""
+    echo -e "${YELLOW}Common Attack Methods:${NC}"
+    echo "• Handshake capture + bruteforce"
+    echo "• WPS PIN attacks"
+    echo "• Evil twin attacks"
+    echo "• Deauthentication attacks"
+    echo ""
+    echo -e "${RED}⚠️  Only test on your own networks!${NC}"
 }
 
-# Main menu
-main_menu() {
+# Main menu for virtual mode
+virtual_main_menu() {
     while true; do
         show_banner
-        echo -e "${BLUE}Status:${NC}"
-        echo -e "Interface: ${GREEN}$selected_interface${NC}"
-        echo -e "Monitor: ${GREEN}$monitor_interface${NC}"
-        echo -e "Scan File: ${GREEN}$scan_file${NC}"
-        echo
-        echo -e "${BLUE}Pilih opsi:${NC}"
-        echo "1. Install Requirements"
-        echo "2. Scan WiFi Networks"
-        echo "3. Capture Handshake"
-        echo "4. WPA Bruteforce"
-        echo "5. WPS Crack PIN"
-        echo "6. Cleanup & Exit"
-        echo
+        echo -e "${BLUE}VIRTUAL DEMO MODE - EDUCATIONAL PURPOSES${NC}"
+        echo ""
+        echo "1. Virtual WiFi Scan"
+        echo "2. Virtual Handshake Capture"
+        echo "3. Virtual WPA Bruteforce"
+        echo "4. Virtual WPS Crack"
+        echo "5. Educational Content"
+        echo "6. Exit"
+        echo ""
         
-        read -p "Pilihan [1-6]: " choice
+        read -p "Select option [1-6]: " choice
         
         case $choice in
             1)
-                install_requirements
+                virtual_scan
                 ;;
             2)
-                scan_menu
+                virtual_handshake
                 ;;
             3)
-                capture_handshake
+                virtual_bruteforce
                 ;;
             4)
-                wpa_bruteforce
+                virtual_wps_crack
                 ;;
             5)
-                wps_crack
+                show_educational
                 ;;
             6)
-                cleanup
-                echo -e "${GREEN}[+] Keluar...${NC}"
+                echo -e "${GREEN}[+] Exiting...${NC}"
                 exit 0
                 ;;
             *)
-                echo -e "${RED}[!] Pilihan tidak valid!${NC}"
+                echo -e "${RED}[!] Invalid option!${NC}"
                 ;;
         esac
         
-        echo
-        read -p "Tekan Enter untuk melanjutkan..."
+        echo ""
+        read -p "Press Enter to continue..."
     done
 }
 
-# Trap Ctrl+C
-trap cleanup EXIT
+# Check environment and start
+check_environment
 
-# Check root and start
-check_root
-main_menu
+if [ "$VIRTUAL_MODE" = true ]; then
+    virtual_main_menu
+else
+    # Original script for hardware mode
+    # ... (original code here)
+    echo "Hardware mode not available in this environment"
+    virtual_main_menu
+fi
