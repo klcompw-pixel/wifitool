@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+"""
+WiFi Scanner Sederhana untuk Linux
+Mendukung VirtualBox dengan USB WiFi adapter
+"""
+
+import subprocess
+import re
+import sys
+
+def check_requirements():
+    """Cek apakah tool yang diperlukan tersedia"""
+    try:
+        subprocess.run(['which', 'nmcli'], capture_output=True, check=True)
+        return 'nmcli'
+    except:
+        pass
+    
+    try:
+        subprocess.run(['which', 'iwlist'], capture_output=True, check=True)
+        return 'iwlist'
+    except:
+        pass
+    
+    return None
+
+def get_wifi_interface():
+    """Dapatkan nama interface WiFi"""
+    try:
+        result = subprocess.run(['ip', 'link', 'show'], 
+                              capture_output=True, text=True)
+        interfaces = re.findall(r'\d+: (wl\w+|wlan\w+):', result.stdout)
+        if interfaces:
+            return interfaces[0]
+    except:
+        pass
+    return None
+
+def scan_with_nmcli():
+    """Scan WiFi menggunakan nmcli"""
+    print("🔍 Memindai jaringan WiFi dengan nmcli...\n")
+    
+    try:
+        # Rescan jaringan
+        subprocess.run(['nmcli', 'device', 'wifi', 'rescan'], 
+                      capture_output=True)
+        
+        # Tampilkan hasil
+        result = subprocess.run(['nmcli', '-f', 'SSID,SIGNAL,SECURITY', 
+                               'device', 'wifi', 'list'],
+                              capture_output=True, text=True)
+        
+        if result.stdout:
+            print("📡 Jaringan WiFi yang ditemukan:")
+            print("=" * 60)
+            print(result.stdout)
+        else:
+            print("❌ Tidak ada jaringan WiFi ditemukan")
+            
+    except Exception as e:
+        print(f"❌ Error: {e}")
+
+def scan_with_iwlist(interface):
+    """Scan WiFi menggunakan iwlist"""
+    print(f"🔍 Memindai jaringan WiFi dengan iwlist di {interface}...\n")
+    
+    try:
+        result = subprocess.run(['sudo', 'iwlist', interface, 'scan'],
+                              capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            print("❌ Error: Memerlukan sudo/root privileges")
+            print("Jalankan dengan: sudo python3 wifi_scanner.py")
+            return
+        
+        # Parse hasil scan
+        cells = result.stdout.split('Cell ')
+        networks = []
+        
+        for cell in cells[1:]:
+            ssid_match = re.search(r'ESSID:"(.+?)"', cell)
+            signal_match = re.search(r'Signal level=(-?\d+)', cell)
+            encryption = 'Secured' if 'Encryption key:on' in cell else 'Open'
+            
+            if ssid_match:
+                ssid = ssid_match.group(1)
+                signal = signal_match.group(1) if signal_match else 'N/A'
+                networks.append((ssid, signal, encryption))
+        
+        if networks:
+            print("📡 Jaringan WiFi yang ditemukan:")
+            print("=" * 60)
+            print(f"{'SSID':<30} {'Signal':<10} {'Security':<10}")
+            print("-" * 60)
+            for ssid, signal, sec in networks:
+                print(f"{ssid:<30} {signal:<10} {sec:<10}")
+        else:
+            print("❌ Tidak ada jaringan WiFi ditemukan")
+            
+    except Exception as e:
+        print(f"❌ Error: {e}")
+
+def main():
+    print("=" * 60)
+    print("     WiFi Scanner untuk Linux (VirtualBox Compatible)")
+    print("=" * 60)
+    print()
+    
+    # Cek tool yang tersedia
+    tool = check_requirements()
+    
+    if not tool:
+        print("❌ Error: nmcli atau iwlist tidak ditemukan!")
+        print("\nInstal salah satu:")
+        print("  - nmcli: sudo apt install network-manager")
+        print("  - iwlist: sudo apt install wireless-tools")
+        sys.exit(1)
+    
+    print(f"✅ Menggunakan: {tool}")
+    
+    if tool == 'nmcli':
+        scan_with_nmcli()
+    else:
+        interface = get_wifi_interface()
+        if not interface:
+            print("❌ Error: Interface WiFi tidak ditemukan!")
+            print("\n💡 Tips untuk VirtualBox:")
+            print("  1. Pastikan USB WiFi adapter terpasang")
+            print("  2. Enable USB di VM settings")
+            print("  3. Attach USB WiFi adapter ke VM")
+            sys.exit(1)
+        
+        print(f"✅ Interface WiFi: {interface}\n")
+        scan_with_iwlist(interface)
+    
+    print("\n" + "=" * 60)
+
+if __name__ == "__main__":
+    main()
