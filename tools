@@ -254,8 +254,6 @@ check_environment
 if [ "$VIRTUAL_MODE" = true ]; then
     virtual_main_menu
 else
-    # Original script for hardware mode
-    # ... (original code here)
     echo "Hardware mode not available in this environment"
     virtual_main_menu
 fi

@@ -9,7 +9,7 @@ import re
 import sys
 
 def check_requirements():
-    """Cek apakah tool yang diperlukan tersedia"""
+    """Cek tool requirements"""
     try:
         subprocess.run(['which', 'nmcli'], capture_output=True, check=True)
         return 'nmcli'
@@ -25,7 +25,7 @@ def check_requirements():
     return None
 
 def get_wifi_interface():
-    """Dapatkan nama interface WiFi"""
+    """get interface wifi"""
     try:
         result = subprocess.run(['ip', 'link', 'show'], 
                               capture_output=True, text=True)
@@ -37,21 +37,19 @@ def get_wifi_interface():
     return None
 
 def scan_with_nmcli():
-    """Scan WiFi menggunakan nmcli"""
-    print("🔍 Memindai jaringan WiFi dengan nmcli...\n")
+    """Scan WiFi nmcli"""
+    print("🔍 Memindai jaringan...\n")
     
     try:
-        # Rescan jaringan
         subprocess.run(['nmcli', 'device', 'wifi', 'rescan'], 
                       capture_output=True)
         
-        # Tampilkan hasil
         result = subprocess.run(['nmcli', '-f', 'SSID,SIGNAL,SECURITY', 
                                'device', 'wifi', 'list'],
                               capture_output=True, text=True)
         
         if result.stdout:
-            print("📡 Jaringan WiFi yang ditemukan:")
+            print("📡 Jaringan WiFi found:")
             print("=" * 60)
             print(result.stdout)
         else:
@@ -62,7 +60,7 @@ def scan_with_nmcli():
 
 def scan_with_iwlist(interface):
     """Scan WiFi menggunakan iwlist"""
-    print(f"🔍 Memindai jaringan WiFi dengan iwlist di {interface}...\n")
+    print(f"🔍 Memindai jaringan WiFi di {interface}...\n")
     
     try:
         result = subprocess.run(['sudo', 'iwlist', interface, 'scan'],
@@ -70,10 +68,9 @@ def scan_with_iwlist(interface):
         
         if result.returncode != 0:
             print("❌ Error: Memerlukan sudo/root privileges")
-            print("Jalankan dengan: sudo python3 wifi_scanner.py")
+            print("Jalankan dengan: sudo python3 namescript")
             return
         
-        # Parse hasil scan
         cells = result.stdout.split('Cell ')
         networks = []
         
